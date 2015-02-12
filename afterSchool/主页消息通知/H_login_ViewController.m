@@ -101,6 +101,32 @@
 }
 
 - (void)loginBt:(UIButton *)sender {
-    [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+    
+    NSString * msg = @"ok";
+//    if (!([userTextfield.text length]>0)) {
+//        msg =@"请输入用户名";
+//    }
+//    else if(pwdTextfield.text.length <6 || pwdTextfield.text.length >20)
+//    {
+//        msg =@"请输入6-20位密码";
+//    }
+    if ([msg isEqualToString:@"ok"]) {
+//        NSLog(@"str =%@",@"http://114.215.125.31/api/v1/user_tokens?user[email]=abc@gmail.com&user[password]=11111111");
+        AFHTTPRequestOperationManager *manager = [AFHTTPRequestOperationManager manager];
+        [manager POST:[NSString stringWithFormat:@"http://114.215.125.31/api/v1/user_tokens?user[nickname]=abc&user[password]=11111111"] parameters:nil success:^(AFHTTPRequestOperation *operation, id responseObject) {
+            NSLog(@"res =%@",responseObject);
+            [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+        } failure:^(AFHTTPRequestOperation *operation, NSError* error) {
+              NSLog(@"err =%@",error);
+        }];
+    }
+    else{
+        UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:@"提示"
+                                                            message:msg
+                                                           delegate:nil
+                                                  cancelButtonTitle:@"确定"
+                                                  otherButtonTitles:nil];
+        [alertView show];
+    }
 }
 @end

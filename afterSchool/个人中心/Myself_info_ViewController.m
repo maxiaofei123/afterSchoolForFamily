@@ -35,6 +35,24 @@
     [self initTableView];
     [self initPicker];
 }
+-(void)requestInfo
+{
+    NSString *str = [[NSUserDefaults standardUserDefaults]objectForKey:@"userName"];
+    if (![str isEqualToString:@"麦飞机会员"]) {
+        NSString *userId = [[NSUserDefaults standardUserDefaults] objectForKey:@"userId"];
+        NSString *token = [[NSUserDefaults standardUserDefaults] objectForKey:@"auth_token"];
+        NSString *email =[[NSUserDefaults standardUserDefaults]objectForKey:@"user_email"];
+        NSDictionary * dic =[[NSDictionary alloc] initWithObjectsAndKeys:token,@"user_token", email,@"user_email",nil];
+        NSString *str =[[NSString alloc] initWithFormat:@"http://api.mfeiji.com/v1/users/%@",userId];
+        AFHTTPRequestOperationManager *manager = [AFHTTPRequestOperationManager manager];
+        [manager GET:str parameters:dic success:^(AFHTTPRequestOperation *operation, id responseObject) {
+            NSDictionary * dic =responseObject;
+            NSLog(@"dic =%@",dic);
+        } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
+            NSLog(@"erro =%@",error.userInfo);
+        }];
+    }
+}
 
 -(void)initPicker
 {

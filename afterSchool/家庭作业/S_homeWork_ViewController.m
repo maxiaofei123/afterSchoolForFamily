@@ -23,6 +23,7 @@
     self.view.backgroundColor =[UIColor colorWithRed:62/255. green:56/255. blue:65/255. alpha:1.];
     imageNameArr = [[NSArray alloc] initWithObjects:@"header.png", @"chineseteach.png", @"meishuTeacher.png", @"meishuTeacher.png", @"header.png", nil];
     [self initTableView];
+    [self requestHomeWork];
 
 }
 -(void)initTableView
@@ -36,8 +37,21 @@
     [self.homeTableView setTableFooterView:view];
     [self.view addSubview:_homeTableView];
 }
-//指定有多少个分区(Section)，默认为1
 
+-(void)requestHomeWork
+{
+//    NSDictionary * parametersDic = [[NSDictionary alloc] initWithObjectsAndKeys:@"2",@"id", nil];
+    AFHTTPRequestOperationManager *manager = [AFHTTPRequestOperationManager manager];
+    [manager GET:@"http://114.215.125.31/api/v1/work_papers/1"parameters:nil success:^(AFHTTPRequestOperation *operation, id responseObject){
+         NSLog(@"res work = %@",responseObject);
+        
+     }failure:^(AFHTTPRequestOperation *operation, NSError *error)
+     {
+         NSLog(@"erro =%@",error);
+     }];
+}
+
+//指定有多少个分区(Section)，默认为1
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     
     return 4;
@@ -114,11 +128,9 @@
     {
     
     }
-
 }
 
 - ( CGFloat )tableView:( UITableView *)tableView heightForHeaderInSection:( NSInteger )section
-
 {  if(section ==0 )
     return 0;
     return 10;
@@ -130,6 +142,7 @@
     view.backgroundColor = [UIColor clearColor];
     return view;
 }
+
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
     // Dispose of any resources that can be recreated.

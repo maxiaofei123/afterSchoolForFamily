@@ -94,8 +94,6 @@
             [imageBt setImage:[UIImage imageNamed:@"takePhoto.png"] forState:UIControlStateNormal];
             [scrollView addSubview:imageBt];
         }
-
-        
     }else if (indexPath.section ==1)
     {
         UIView * bcview = [[UIView alloc] initWithFrame:CGRectMake(10, 10, Main_Screen_Width-40, 140)];
@@ -160,7 +158,6 @@
     UIActionSheet *sheet =[[UIActionSheet alloc]initWithTitle:@"选择图片来源" delegate:self cancelButtonTitle:nil destructiveButtonTitle:nil otherButtonTitles:@"从相册中选择",@"摄像头拍摄",@"取消", nil];
     sheet.tag =101;
     [sheet showInView:[UIApplication sharedApplication].keyWindow];
-
 }
 
 -(void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex
@@ -189,7 +186,6 @@
                     [alertView show];
                     
                 }
-                
             }
                 break;
             case 0:
@@ -208,9 +204,5 @@
                 break;
         }
     }
-
 }
-
-
-
 @end
