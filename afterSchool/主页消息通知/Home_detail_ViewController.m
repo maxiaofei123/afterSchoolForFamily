@@ -21,27 +21,30 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.navigationItem.title = @"详细内容";
+    self.edgesForExtendedLayout = UIRectEdgeNone;
     bcView = [[UIView alloc] initWithFrame:CGRectMake(10, 0, Main_Screen_Width-20, Main_Screen_Height-64 -49 -10)];
     bcView.layer.cornerRadius = 8;
     bcView.backgroundColor = [UIColor whiteColor];
     [self.view addSubview:bcView];
-    
     [self drawView];
 }
 
 -(void)drawView
 {
-    UILabel * titleLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, Main_Screen_Width-40, 20)];
-    titleLable.text = @"今天班级举行圣诞活动";
+    float titleLableSizeHeight= [publicRequest lableSizeWidthFont16:Main_Screen_Width-40 content:[self.messageDic objectForKey:@"topic"]] ;
+    UILabel * titleLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, Main_Screen_Width-40, titleLableSizeHeight)];
+    titleLable.text = [self.messageDic objectForKey:@"topic"];
+    titleLable.lineBreakMode = NSLineBreakByWordWrapping;
+    titleLable.numberOfLines = 0;
     [bcView addSubview:titleLable];
-    UILabel  * dateLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, Main_Screen_Width-40, 20)];
-    dateLable.text = @"今天 14：30";
+    UILabel  * dateLable = [[UILabel alloc] initWithFrame:CGRectMake(15, 10+titleLableSizeHeight, Main_Screen_Width-40, 20)];
+    dateLable.text = [[self.messageDic objectForKey:@"updated_at"] substringToIndex:10];
     dateLable.textColor = [UIColor grayColor];
     dateLable.font = [UIFont  systemFontOfSize:14.];
     [bcView addSubview:dateLable];
-    
+    int height=0;
     if (imageArr.count >0) {
-        scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(10, 50, Main_Screen_Width-40, 100)];
+        scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(10, 30+titleLableSizeHeight, Main_Screen_Width-40, 100)];
         scrollView.backgroundColor = [UIColor whiteColor];
         scrollView.showsHorizontalScrollIndicator = NO;
         scrollView.showsVerticalScrollIndicator = NO;
@@ -64,13 +67,18 @@
         pageControl.currentPageIndicatorTintColor=[UIColor grayColor];
         pageControl.pageIndicatorTintColor = [UIColor redColor];
         [bcView addSubview:pageControl];
+        height = 110;
     }
-    
-    UITextView * textView = [[UITextView alloc] initWithFrame:CGRectMake(10, 210, Main_Screen_Width-40, bcView.frame.size.height -350)];
+    float textSizeHeight= [publicRequest lableSizeWidthFont16:Main_Screen_Width-40 content:[self.messageDic objectForKey:@"body"]] ;
+    UITextView * textView = [[UITextView alloc] initWithFrame:CGRectMake(10,30+height+titleLableSizeHeight, Main_Screen_Width-40, Main_Screen_Height -59 -64- height-titleLableSizeHeight-30)];
     textView.textColor = [UIColor grayColor];
     textView.font = [UIFont systemFontOfSize:16.];
-    textView.text = @"我么回事怎么回事的的的乐乐乐乐你猜踩踩踩是的分手的方式地方撒旦发射点发撒旦发射点发电风扇电风扇地方水电费水电费水电费是对方的风格的风格反对股电饭锅发给奋斗过大范甘迪风格豆腐干的风格的风格的风格豆腐干豆腐干电饭锅电饭锅电饭锅豆腐干豆腐干电饭锅对方感动感\n动过的风格的风格风格的风格的风格的风格电饭锅对方感动的歌豆腐干豆腐干电饭锅对方更多更多风格地方发给的风格的风格豆腐干豆腐干电饭锅大概风格的烦的风格的歌风格的风格风格丹甫股份感豆腐干地方股份的歌发给的风格的风格风格豆腐干豆腐干 的风格反对感豆腐干的风格对方给对方改革的风格的风格的风格的风格的风格的风格的风格的风格的风格的风格的风格的风格的风格的风格的风格反对";
+    textView.text = [self.messageDic objectForKey:@"body"];
     [bcView addSubview:textView];
+     NSLog(@"%f     %f",textView.frame.origin.y+textSizeHeight+64+30, Main_Screen_Height-59);
+    if (textView.frame.origin.y+textSizeHeight+64+30+titleLableSizeHeight > Main_Screen_Height-59) {
+        textView.frame = CGRectMake(10,30+height+titleLableSizeHeight, Main_Screen_Width-40, Main_Screen_Height -59 -64- height-titleLableSizeHeight-30);
+    }
     
 }
 

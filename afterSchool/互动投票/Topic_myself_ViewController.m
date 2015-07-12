@@ -7,9 +7,14 @@
 //
 
 #import "Topic_myself_ViewController.h"
+#import "Add_myTopic_ViewController.h"
 
 @interface Topic_myself_ViewController ()<UITableViewDataSource,UITableViewDelegate>
-
+{
+    int pageFlag ;
+    NSMutableArray * workArr;
+     NSMutableArray * topicImageArr;
+}
 @property(strong ,nonatomic)UITableView * topicTableView;
 
 
@@ -22,7 +27,12 @@
     [super viewDidLoad];
     self.view.layer.cornerRadius = 8;
     self.view.backgroundColor = [UIColor colorWithRed:247/255. green:247/255. blue:247/255. alpha:1.];
-     [self initTableView];
+    pageFlag = 0 ;
+    workArr = [[NSMutableArray alloc] init];
+    topicImageArr = [[NSMutableArray alloc] init];
+    [self initTableView];
+//    [self requestHomeWork:0];
+//    self.edgesForExtendedLayout = UIRectEdgeNone;
 }
 
 - (void)didReceiveMemoryWarning {
@@ -33,7 +43,7 @@
 -(void)initTableView
 {
     UIImageView * logoView = [[UIImageView alloc] initWithFrame:CGRectMake(10, 10, 77, 70)];
-    logoView.image = [UIImage imageNamed:@"myTopicLogo@3x.png"];
+    logoView.image = [UIImage imageNamed:@"myTopicLogo.png"];
     [self.view addSubview:logoView];
     
     UIButton * addBt = [[UIButton alloc] initWithFrame:CGRectMake(Main_Screen_Width -70, 25, 30, 30)];
@@ -42,7 +52,7 @@
     [self.view addSubview:addBt];
     
     UILabel * titleLable = [[UILabel alloc] initWithFrame:CGRectMake(90, 40, 200, 20)];
-    titleLable.text =@"全部话题";
+    titleLable.text =@"我的话题";
     titleLable.font = [UIFont systemFontOfSize:16];
     [self.view addSubview:titleLable];
     
@@ -50,7 +60,50 @@
     _topicTableView.backgroundColor = [UIColor clearColor];
     _topicTableView.delegate =self;
     _topicTableView.dataSource = self;
+    [_topicTableView addHeaderWithTarget:self action:@selector(headerRefresh)];
+    [_topicTableView addFooterWithTarget:self action:@selector(footerRefresh)];
     [self.view addSubview:_topicTableView];
+    UIView *view = [UIView new];
+    view.backgroundColor = [UIColor clearColor];
+    [_topicTableView setTableFooterView:view];
+    [_topicTableView headerBeginRefreshing];
+}
+
+-(void)headerRefresh
+{
+    pageFlag = 1 ;
+    [self requestHomeWork:pageFlag];
+}
+
+-(void)footerRefresh
+{
+    [self requestHomeWork:++pageFlag];
+}
+
+-(void)requestHomeWork:(int)pageIndex
+{
+    NSDictionary * parameters = [[NSDictionary alloc] initWithObjectsAndKeys:[NSString stringWithFormat:@"%d",pageIndex],@"page", nil];
+    
+//    NSLog(@"id = %@",[[NSUserDefaults standardUserDefaults] objectForKey:@"user_id"] );
+    AFHTTPRequestOperationManager *manager = [AFHTTPRequestOperationManager manager];
+    [manager GET:[NSString stringWithFormat:@"http://114.215.125.31/api/v1/posts?student_id=%@",[[NSUserDefaults standardUserDefaults] objectForKey:@"user_id"]]parameters:parameters success:^(AFHTTPRequestOperation *operation, id responseObject){
+        NSArray * arr = [responseObject objectForKey:@"posts"];
+         NSArray *imagearr = [responseObject objectForKey:@"media_resources"];
+        if (pageFlag == 1) {
+            [workArr removeAllObjects];
+            [topicImageArr removeAllObjects];
+        }
+        [workArr addObjectsFromArray:arr];
+        [topicImageArr addObjectsFromArray:imagearr];
+        [_topicTableView footerEndRefreshing];
+        [_topicTableView headerEndRefreshing];
+        [_topicTableView reloadData];        NSLog(@"myself topic = %@",arr);
+    }failure:^(AFHTTPRequestOperation *operation, NSError *error)
+     {
+         [_topicTableView footerEndRefreshing];
+         [_topicTableView headerEndRefreshing];
+         NSLog(@"erro =%@",error);
+     }];
 }
 
 //指定有多少个分区(Section)，默认为1
@@ -62,7 +115,7 @@
 //指定每个分区中有多少行，默认为1
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
-    return 15;
+    return workArr.count;
 }
 //绘制Cell
 
@@ -79,21 +132,23 @@
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:tableSampleIdentifier];
     }
     [_topicTableView  setSeparatorStyle:UITableViewCellSeparatorStyleNone];
+    
     cell.backgroundColor = [UIColor clearColor];
+    
     UIImageView * meImage = [[UIImageView alloc] initWithFrame:CGRectMake(10, 7, 25, 25)];
     meImage.image = [UIImage imageNamed:@"messegeLogo.png"];
     [cell.contentView addSubview:meImage];
     
-    UILabel * contenLable = [[UILabel alloc] initWithFrame:CGRectMake(40, 5, self.view.frame.size.width -130 , 30)];
+    UILabel * contenLable = [[UILabel alloc] initWithFrame:CGRectMake(40, 5, self.view.frame.size.width -70 , 30)];
     contenLable.font = [UIFont systemFontOfSize:14.];
-    contenLable.text = @"全部话题全部话题全部话题全部话题全部话题全部话题";
+    contenLable.text =[[workArr objectAtIndex:indexPath.row] objectForKey:@"title"];
     [cell.contentView addSubview:contenLable];
     
-    UILabel * commentlable = [[UILabel alloc] initWithFrame:CGRectMake(self.view.frame.size.width -80, 5, 80, 30)];
-    commentlable.text =@"评论321次";
-    commentlable.font = [UIFont systemFontOfSize:14.];
-    commentlable.textColor = [UIColor grayColor];
-    [cell.contentView addSubview:commentlable];
+//    UILabel * commentlable = [[UILabel alloc] initWithFrame:CGRectMake(self.view.frame.size.width -80, 5, 80, 30)];
+//    commentlable.text =@"评论321次";
+//    commentlable.font = [UIFont systemFontOfSize:14.];
+//    commentlable.textColor = [UIColor grayColor];
+//    [cell.contentView addSubview:commentlable];
 
     return cell;
 }
@@ -106,14 +161,16 @@
 
 -(void)addTopic:(UIButton *)sender
 {
-    
+    if (self.addTopicBlock) {
+        self.addTopicBlock();
+    }
 }
 
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath{
     [tableView deselectRowAtIndexPath:indexPath animated:YES];//选中后的反显颜色即刻消失
     if (self.myselfTopicTapActionBlock) {
-        self.myselfTopicTapActionBlock(indexPath.row);
+        self.myselfTopicTapActionBlock(indexPath.row,[workArr objectAtIndex:indexPath.row],[topicImageArr objectAtIndex:indexPath.row]);
     }
 }
 

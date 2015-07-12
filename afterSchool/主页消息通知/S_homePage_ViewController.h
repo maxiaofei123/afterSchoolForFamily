@@ -9,5 +9,7 @@
 #import <UIKit/UIKit.h>
 
 @interface S_homePage_ViewController : UIViewController
+
 @property(strong ,nonatomic)UITableView * homeTableView;
+
 @end

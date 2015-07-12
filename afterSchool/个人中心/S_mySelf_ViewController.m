@@ -20,13 +20,25 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    [self.navigationController.navigationBar setBackgroundImage:[[UIImage alloc] init] forBarMetrics:UIBarMetricsDefault];
+    self.navigationController.navigationBar.shadowImage = [[UIImage alloc] init];
+    self.navigationItem.title = @"个人中心";
+    self.navigationController.navigationBar.tintColor = [UIColor whiteColor];
+    UIBarButtonItem *item = [[UIBarButtonItem alloc] initWithTitle:@"" style:UIBarButtonItemStylePlain target:nil action:nil];
+    self.navigationItem.backBarButtonItem = item;
     self.view.backgroundColor =[UIColor colorWithRed:62/255. green:56/255. blue:65/255. alpha:1.];
+    
+    self.edgesForExtendedLayout = UIRectEdgeNone;
+    
     [self initTableView];
 }
 
 -(void)initTableView
 {
     UIView * backGroundView = [[UIView alloc] initWithFrame:CGRectMake(10, 10, Main_Screen_Width-20, Main_Screen_Height-64-49-20)];
+//    if (Version< 8) {
+//        backGroundView.frame =CGRectMake(10, 64, Main_Screen_Width-20,Main_Screen_Height-64-59);
+//    }
     backGroundView.backgroundColor =[UIColor colorWithRed:247/255. green:247/255. blue:247/255. alpha:1.];
     backGroundView.layer.cornerRadius = 5;
     [self.view addSubview:backGroundView];
@@ -49,8 +61,8 @@
     headView.layer.masksToBounds = YES;
     [backGroundView addSubview:headView];
     
-    UILabel * userLable =[[UILabel alloc] initWithFrame:CGRectMake(backGroundView.frame.size.width/2-50, 95, 100, 20)];
-    userLable.text = @"小明";
+    UILabel * userLable =[[UILabel alloc] initWithFrame:CGRectMake(backGroundView.frame.size.width/2-100, 95, 200, 20)];
+    userLable.text = [[NSUserDefaults standardUserDefaults] objectForKey:@"nickname"];
     userLable.font = [UIFont systemFontOfSize:14.];
     userLable.textAlignment = NSTextAlignmentCenter;
     [backGroundView addSubview:userLable];
@@ -69,7 +81,7 @@
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     
-    return 2;
+    return 1;
 }
 
 //指定每个分区中有多少行，默认为1
@@ -119,8 +131,12 @@
 
     }else
     {
-        Myself_count_ViewController * count = [[Myself_count_ViewController alloc] init];
-        [self.navigationController pushViewController:count animated:YES];
+//        Myself_count_ViewController * count = [[Myself_count_ViewController alloc] init];
+//        [self.navigationController pushViewController:count animated:YES];
+        HUD = [MBProgressHUD showHUDAddedTo:self.view animated:NO];
+        HUD.mode = MBProgressHUDModeText;
+        HUD.labelText = @"此功能继续开发中。。。";
+        [HUD hide:YES afterDelay:1.];
     }
 }
 

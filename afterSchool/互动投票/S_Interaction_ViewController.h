@@ -8,8 +8,11 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol PassValueDelegate<NSObject>
+
+-(void)pull;
+@end
+
 @interface S_Interaction_ViewController : UIViewController
-@property (weak, nonatomic) IBOutlet UISegmentedControl *segmentedControl;
-- (IBAction)topic:(id)sender;
 
 @end

@@ -7,6 +7,7 @@
 //
 
 #import "H_login_ViewController.h"
+#import "JSONKit.h"
 
 @interface H_login_ViewController ()<UITextFieldDelegate>
 {
@@ -17,7 +18,7 @@
 @end
 
 @implementation H_login_ViewController
-
+@synthesize delegate;
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self drawView];
@@ -51,6 +52,7 @@
     userTextfield = [[UITextField alloc] initWithFrame:CGRectMake(50, 18, Main_Screen_Width-120, 20)];
     userTextfield.placeholder = @"用户名";
     userTextfield.delegate = self;
+    userTextfield.text =[[NSUserDefaults standardUserDefaults] objectForKey:@"email"];
     userTextfield.font = [UIFont systemFontOfSize:16.];
     userTextfield.clearButtonMode = UITextFieldViewModeWhileEditing;
     [userImage addSubview:userTextfield];
@@ -67,9 +69,12 @@
     [commitBt setImage:[UIImage imageNamed:@"login.png"] forState:UIControlStateNormal];
     [commitBt addTarget:self action:@selector(loginBt:) forControlEvents:UIControlEventTouchUpInside];
     [scrollView addSubview:commitBt];
-    
-    
-
+//    
+//    UILabel * vesion = [[UILabel alloc] initWithFrame:CGRectMake(Main_Screen_Width/2-50, Main_Screen_Height/2+250, 100, 20)];
+//    vesion.text = @"版本1.5";
+//    vesion.textAlignment = NSTextAlignmentCenter;
+//    vesion.textColor = [UIColor whiteColor];
+//    [scrollView addSubview:vesion];
 }
 //隐藏键盘
 -(void)textFieldEditing
@@ -81,7 +86,7 @@
 - (void)textFieldDidBeginEditing:(UITextField *)textField
 {
     if (textField == userTextfield) {
-        [scrollView setContentOffset:CGPointMake(0, 70) animated:YES];
+        [scrollView setContentOffset:CGPointMake(0, 100) animated:YES];
     }else if (textField == pwdTextfield)
         [scrollView setContentOffset:CGPointMake(0, 100) animated:YES];
 }
@@ -93,8 +98,6 @@
     [scrollView setContentOffset:CGPointMake(0, 0) animated:YES];
 }
 
-
-
 - (void)didReceiveMemoryWarning {
     [super didReceiveMemoryWarning];
     // Dispose of any resources that can be recreated.
@@ -103,24 +106,56 @@
 - (void)loginBt:(UIButton *)sender {
     
     NSString * msg = @"ok";
-//    if (!([userTextfield.text length]>0)) {
-//        msg =@"请输入用户名";
-//    }
-//    else if(pwdTextfield.text.length <6 || pwdTextfield.text.length >20)
-//    {
-//        msg =@"请输入6-20位密码";
-//    }
+    if (!([userTextfield.text length]>0)) {
+        msg =@"请输入用户名";
+    }
+    else if(pwdTextfield.text.length <8 || pwdTextfield.text.length >20)
+    {
+        msg =@"请输入8-20位密码";
+    }
     if ([msg isEqualToString:@"ok"]) {
-//        NSLog(@"str =%@",@"http://114.215.125.31/api/v1/user_tokens?user[email]=abc@gmail.com&user[password]=11111111");
+        HUD = [MBProgressHUD showHUDAddedTo:self.view animated:NO];
+        HUD.labelText = @"正在请求...";
+        NSDictionary * parameters = [[NSDictionary alloc] initWithObjectsAndKeys:userTextfield.text,@"user[email]",pwdTextfield.text ,@"user[password]", nil];
+        NSLog(@"用户登陆 =%@",parameters);
         AFHTTPRequestOperationManager *manager = [AFHTTPRequestOperationManager manager];
-        [manager POST:[NSString stringWithFormat:@"http://114.215.125.31/api/v1/user_tokens?user[nickname]=abc&user[password]=11111111"] parameters:nil success:^(AFHTTPRequestOperation *operation, id responseObject) {
-            NSLog(@"res =%@",responseObject);
-            [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+        [manager POST:[NSString stringWithFormat:@"http://114.215.125.31/api/v1/user_tokens/"] parameters:parameters success:^(AFHTTPRequestOperation *operation, id responseObject) {
+            NSDictionary * dic = responseObject;
+            NSLog(@"my login res =%@",responseObject);
+            if([dic objectForKey:@"error"])
+            {
+                HUD.labelText = @"用户名或密码错误";
+                [HUD hide:YES afterDelay:1.];
+            }else
+            {
+                [HUD hide:YES ];
+                [[NSUserDefaults standardUserDefaults] setObject:[dic objectForKey:@"user_id"] forKey:@"user_id"];
+                [[NSUserDefaults standardUserDefaults] setObject:[dic objectForKey:@"token"] forKey:@"user_token"];
+                [[NSUserDefaults standardUserDefaults] setObject:[[dic objectForKey:@"user"] objectForKey:@"nickname"] forKey:@"nickname"];
+                [[NSUserDefaults standardUserDefaults] setObject:[[dic objectForKey:@"user"] objectForKey:@"email"] forKey:@"email"];
+                [[NSUserDefaults standardUserDefaults] setObject:pwdTextfield.text forKey:@"userPassword"];
+                [[NSUserDefaults standardUserDefaults]setObject:[[dic objectForKey:@"user"] objectForKey:@"school_class_id"] forKey:@"class_id"];
+                [self.delegate initTableView];
+                [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+            }
         } failure:^(AFHTTPRequestOperation *operation, NSError* error) {
-              NSLog(@"err =%@",error);
+            NSDictionary *  dic = error.userInfo;
+            NSLog(@"error =%@",error.userInfo);
+            NSData * data = [dic objectForKey:@"com.alamofire.serialization.response.error.data"];
+            NSString * str = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            NSDictionary * strDic =  [str objectFromJSONString];
+            NSString * msg1= [strDic objectForKey:@"error"];
+            if (msg1.length<1) {
+                
+                msg1 = @"登陆失败,请检查网络链接";
+            }
+            HUD.labelText = msg1;
+            [HUD hide:YES afterDelay:1.5];
+
         }];
     }
     else{
+        
         UIAlertView *alertView = [[UIAlertView alloc] initWithTitle:@"提示"
                                                             message:msg
                                                            delegate:nil
@@ -129,4 +164,5 @@
         [alertView show];
     }
 }
+
 @end

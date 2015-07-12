@@ -9,5 +9,12 @@
 #import <UIKit/UIKit.h>
 
 @interface Work_type_mp3_ViewController : UIViewController
+{
+
+}
+@property(nonatomic,strong) NSString * mp3WorkId;
+
+
+@property(nonatomic,assign) NSObject<UIViewPassValueDelegate> *delegate;
 
 @end

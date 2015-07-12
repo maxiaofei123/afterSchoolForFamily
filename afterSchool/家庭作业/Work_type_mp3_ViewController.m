@@ -7,189 +7,379 @@
 //
 
 #import "Work_type_mp3_ViewController.h"
-#import "FSAudioStream.h"
-#import "FSAudioController.h"
 #import <AVFoundation/AVFoundation.h>
+#import <CoreAudio/CoreAudioTypes.h>
 #import "lame.h"
-
-@interface Work_type_mp3_ViewController ()<UITableViewDelegate,UITableViewDataSource,AVAudioPlayerDelegate>
+#import "AudioStreamer.h"
+#import <MobileCoreServices/MobileCoreServices.h>
+#import <MediaPlayer/MediaPlayer.h>
+#import "MJPhotoBrowser.h"
+#import "MJPhoto.h"
+@interface Work_type_mp3_ViewController ()<UITableViewDelegate,UITableViewDataSource,AVAudioPlayerDelegate,UITextViewDelegate,AVAudioSessionDelegate>
 {
     UILabel * timeLable;
     UISlider * slider;
     NSTimer *_progressUpdateTimer;
-    
+    NSTimer *stopTimer;
+    NSTimer * shortTimer;
+    int   shortTime;
+
     double _seekToPoint;
-    NSTimer *_playbackSeekTimer;
-    FSAudioStreamPrivate *_private;
+//    NSTimer *_playbackSeekTimer;
     
     NSTimer *_volumeRampTimer;
     float _volumeBeforeRamping;
     int _rampStep;
-    UIButton *playBt;
-    BOOL playOrNot;
+    
+    int index;
+    
     BOOL voicePlay;
     
     //luyin
-    NSURL *recordedFile;
     AVAudioPlayer *player;
+    AVAudioSession *session;
+    NSURL *recordedFile;
     AVAudioRecorder *recorder;
     BOOL isRecording;
-    //    Path
-    NSString *_strCAFPath;
-    NSString *_strMp3Path;
-    
-}
+    NSString *mp3FilePath;
 
+    NSMutableArray * imageUrlArr;
+    NSMutableArray * mp3UrlArr;
+    NSMutableArray * mp4UrlArr;
+    NSDictionary * workPaperDic;
+    UITextView * messageword;
+    NSString * cafPath;
+    
+    NSString * filePath;
+
+}
+//播放音频
 @property(strong,nonatomic)UITableView * finishTableView;
 @property(strong,nonatomic)NSString * type;
-@property (nonatomic,strong) FSAudioStream *audioStream;
-@property (nonatomic,strong) FSAudioController *audioController;
 @property (nonatomic,strong) UISlider *progressSlider;
+@property (strong, nonatomic)  UIButton *playMusicButton;
+@property (nonatomic, retain) AudioStreamer *streamer;
 
+//record
+@property (nonatomic , retain) AVAudioPlayer *player;
+@property (nonatomic , retain) NSURL *recordedFile;
 @property (nonatomic) BOOL isRecording;
 @property (strong, nonatomic)  UIButton *playButton;
 @property (strong, nonatomic)  UIButton *recordButton;
 
-@property (retain, nonatomic) NSString* _lastRecordFileName;
-
 @end
 
 @implementation Work_type_mp3_ViewController
+
 @synthesize playButton = _playButton;
 @synthesize recordButton = _recordButton;
 @synthesize isRecording = _isRecording;
+@synthesize player;
+@synthesize recordedFile;
+@synthesize delegate;
+
+-(void)viewWillDisappear:(BOOL)animated
+{
+    [player stop];
+    player = nil ;
+    
+    [_streamer stop];
+    _streamer = nil;
+    [_progressUpdateTimer invalidate];
+    _progressUpdateTimer=nil;
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:ASStatusChangedNotification
+                                                  object:_streamer];
+    
+    [self.playMusicButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+
+}
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.navigationItem.title = @"详细内容";
+    self.edgesForExtendedLayout = UIRectEdgeNone;
     [self initTableView];
     
     self.isRecording = NO;
-    playOrNot = NO;
     voicePlay = NO;
-    [self.playButton setEnabled:NO];
-    self.playButton.titleLabel.alpha = 0.5;
+    index = 0 ;
 
     //录音
+    cafPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/downloadFile.caf"];
+//    NSLog(@"%@",path);
+    recordedFile = [[NSURL alloc] initFileURLWithPath:cafPath];
+//    NSLog(@"%@",recordedFile);
     
-    NSDateFormatter *folderNameFormatter = [[NSDateFormatter alloc] init];
-    [folderNameFormatter setDateFormat:@"yyyyMMddhhmmss"];
-    NSString *folderName = [folderNameFormatter stringFromDate:[NSDate date]] ;
-    
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-    NSString *documentsDirectory = [paths objectAtIndex:0];
-    NSLog(@"documentsDirectory:%@",documentsDirectory);
-    NSString *folderPath = [documentsDirectory stringByAppendingPathComponent:folderName];
-    NSLog(@"folderPath:%@",folderPath);
-    
-    _strCAFPath = [[NSString alloc] initWithFormat:@"%@/%@",documentsDirectory,@"CAF"];
-    _strMp3Path = [[NSString alloc] initWithFormat:@"%@/%@",documentsDirectory,@"Mp3"];
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    
-    [fileManager createDirectoryAtPath:_strCAFPath withIntermediateDirectories:YES attributes:nil error:nil];
-    [fileManager createDirectoryAtPath:_strMp3Path withIntermediateDirectories:YES attributes:nil error:nil];
-
+    [self request];
 }
-- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+
+-(void)request//作业详情请求
 {
-    return (interfaceOrientation != UIInterfaceOrientationPortraitUpsideDown);
+    AFHTTPRequestOperationManager *manager = [AFHTTPRequestOperationManager manager];
+    [manager GET:[NSString stringWithFormat:@"http://114.215.125.31/api/v1/work_papers/%@",self.mp3WorkId ]parameters:nil success:^(AFHTTPRequestOperation *operation, id responseObject){
+        workPaperDic = [responseObject objectForKey:@"work_paper"];
+        imageUrlArr = [[NSMutableArray alloc] init];
+        mp3UrlArr = [[NSMutableArray alloc] init];
+        mp4UrlArr = [[NSMutableArray alloc] init];
+        for (int i=0 ; i<[[workPaperDic objectForKey:@"medias"] count]; i++) {
+            NSString * type = [[[workPaperDic objectForKey:@"medias"] objectAtIndex:i]objectForKey:@"content_type"];
+            NSString * str = [[[workPaperDic objectForKey:@"medias"] objectAtIndex:i]objectForKey:@"avatar"];
+            if(![str isKindOfClass:[NSNull class]])
+            {
+
+                NSRange range = [type rangeOfString:@"/"];
+                NSString * rangeType = [type substringToIndex:range.location];
+                //                NSLog(@"range =%d =%@",range.location,rangeType);
+                
+                if ([rangeType isEqualToString:@"video"]) {
+                    [mp4UrlArr addObject:str];
+                }else if ([rangeType isEqualToString:@"audio"]||[rangeType isEqualToString:@"sound"])
+                {
+                    [mp3UrlArr addObject:str];
+                    
+                }else if ([rangeType isEqualToString:@"image"])
+                {
+                    [imageUrlArr addObject:str];
+                }
+            }
+        }
+//        NSLog(@"作业详细 = %@",imageUrlArr);
+        //刷新tableView单行数据；
+        NSIndexPath * indexx = [NSIndexPath indexPathForItem:0 inSection:0];
+        NSArray * array = [NSArray arrayWithObject:indexx];
+        [_finishTableView reloadRowsAtIndexPaths:array withRowAnimation:UITableViewRowAnimationAutomatic];
+    }failure:^(AFHTTPRequestOperation *operation, NSError *error)
+     {
+         NSLog(@"erro =%@",error);
+     }];
 }
 
-#pragma mark -
-- (void)recordOrStop:(id)sender {
+-(void)commitHomeWork:(UIButton *)sender
+{
+    [player stop];
+    [self.playButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
     
-    _isRecording=!_isRecording;
+    player = nil ;
+    [_streamer stop];
+      _streamer = nil;
+    [_progressUpdateTimer invalidate];
+    _progressUpdateTimer=nil;
     
-    if (_isRecording) {
-        [self.playButton setEnabled:NO];
-        [self.recordButton setImage:[UIImage imageNamed:@"recoreding.png"] forState:UIControlStateNormal];
-        NSDateFormatter *fileNameFormatter = [[NSDateFormatter alloc] init];
-        [fileNameFormatter setDateFormat:@"yyyyMMddhhmmss"];
-        NSString *fileName = [fileNameFormatter stringFromDate:[NSDate date]];
-        
-        fileName = [fileName stringByAppendingString:@".caf"];
-        NSString *cafFilePath = [_strCAFPath stringByAppendingPathComponent:fileName];
-        NSURL *cafURL = [NSURL fileURLWithPath:cafFilePath];
-        
-        NSError *error;
-        NSLog(@"cafURL:%@" ,cafURL);
-        
-        NSDictionary *recordFileSettings = [NSDictionary
-                                            dictionaryWithObjectsAndKeys:
-                                            [NSNumber numberWithInt:AVAudioQualityMin],
-                                            AVEncoderAudioQualityKey,
-                                            [NSNumber numberWithInt:16],
-                                            AVEncoderBitRateKey,
-                                            [NSNumber numberWithInt: 2],
-                                            AVNumberOfChannelsKey,
-                                            [NSNumber numberWithFloat:44100.0],
-                                            AVSampleRateKey,
-                                            nil];
-        
-        @try {
-            if (!player) {
-                recorder = [[AVAudioRecorder alloc] initWithURL:cafURL settings:recordFileSettings error:&error];
-            }else {
-                if ([recorder isRecording]) {
-                    [recorder stop];
+    if(shortTime == 0){
+        HUD = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        HUD.labelText = @"没有可用的录音,请重新录制";
+        [HUD hide:YES afterDelay:1];
+    }else{
+        HUD = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        HUD.labelText = @"正在提交...";
+        NSDictionary * dic = [[NSDictionary alloc] initWithObjectsAndKeys:[workPaperDic objectForKey:@"title"],@"home_work[title]",[workPaperDic objectForKey:@"id"],@"home_work[work_paper_id]",messageword.text,@"home_work[description]", nil ];
+        AFHTTPRequestOperationManager *manager = [AFHTTPRequestOperationManager manager];
+        [manager POST:[NSString stringWithFormat:@"http://114.215.125.31/api/v1/students/%@/home_works",[[NSUserDefaults standardUserDefaults]objectForKey:@"user_id"]]  parameters:dic  success:^(AFHTTPRequestOperation *operation, id responseObject) {
+            
+            NSDictionary * dic =responseObject;
+
+            NSFileManager* manager = [NSFileManager defaultManager];
+            if ([manager fileExistsAtPath:cafPath]){
+                  NSLog(@"准备提交资源");
+                if([self audio_PCMtoMP3]){
+                    NSArray *arr = [[NSArray alloc] initWithObjects:mp3FilePath, nil];
+                    [self commitResource:[[dic objectForKey:@"home_work"] objectForKey:@"id"]  resource:arr ];
                 }
-                recorder=Nil;
-                recorder = [[AVAudioRecorder alloc] initWithURL:cafURL settings:recordFileSettings error:&error];
+            }else{
+                    HUD.labelText = @"提交成功。。。";
+                    [HUD hide:YES afterDelay:1.];
+                    [self.delegate headerRefresh];
+                    [self.navigationController popViewControllerAnimated:YES];
             }
             
-            if (recorder) {
-                [recorder prepareToRecord];
-                recorder.meteringEnabled = YES;
-                
-                [recorder record];
-                NSLog(@"_avRecorder recording");
-                
-                self._lastRecordFileName=fileName;
-                
-            }
-        }
-        @catch (NSException *exception) {
-            NSLog(@"%@",[exception description]);
-        }
-        @finally {
-            NSLog(@"%@",[error description]);
-        }
+        }  failure:^(AFHTTPRequestOperation *operation, NSError *error) {
+            NSLog(@"error =%@ ",error);
+            HUD.labelText = @"请求失败,请检查网络链接";
+            [HUD hide:YES afterDelay:1.];
+        }];
+    }
+    
+}
+
+-(void)commitResource:(NSString * )homeWorkId resource:(NSArray *)resourceArr
+{
+    NSLog(@"resouece =%@",resourceArr);
+    for (int i =0;i<resourceArr.count ; i++) {
+        AFHTTPRequestOperationManager * manager = [AFHTTPRequestOperationManager manager];
+        [manager POST:[NSString stringWithFormat:@"http://114.215.125.31/api/v1/home_works/%@/media_resources",homeWorkId] parameters:nil constructingBodyWithBlock:^(id<AFMultipartFormData> formData){
+            
+//        NSFileManager* manager = [NSFileManager defaultManager];
+//        if ([manager fileExistsAtPath:[resourceArr objectAtIndex:0]]){
+//            NSLog(@"文件大小 =%llu",[[manager attributesOfItemAtPath:[resourceArr objectAtIndex:0] error:nil] fileSize]);
+//        }
+        NSData * mp3data = [NSData dataWithContentsOfFile:[resourceArr objectAtIndex:0]];
+        [formData appendPartWithFileData:mp3data name:@"media_resource[avatar]"fileName:[NSString stringWithFormat:@"anyaudio_%d.mp3",i+1] mimeType:@"audio/mp3"];
+            
+    } success:^(AFHTTPRequestOperation *operation, id responseObject)
+    {
+        //清楚写入的 caf mp3
+        NSFileManager * caffileManager = [[NSFileManager alloc]init];
+        [caffileManager removeItemAtPath:cafPath error:nil];
+        NSFileManager * mp3fileManager = [[NSFileManager alloc]init];
+        [mp3fileManager removeItemAtPath:mp3FilePath error:nil];
         
-    }else {
-        [self.playButton setEnabled:YES];
-        [self.recordButton setImage:[UIImage imageNamed:@"voice.png"] forState:UIControlStateNormal];
-        if (recorder) {
-            NSError *error=nil;
-            @try {
-                [recorder stop];
-                recorder=Nil;
-                [self toMp3:self._lastRecordFileName];
-            }
-            @catch (NSException *exception) {
-                NSLog(@"%@",[exception description]);
-            }
-            @finally {
-                NSLog(@"%@",[error description]);
-            }
-        }
+         NSDictionary * dic =responseObject;
+         NSLog(@"dic =%@",dic);
+         HUD.labelText = @"提交成功。。。";
+         [HUD hide:YES afterDelay:1.];
+        
+        [self.delegate headerRefresh];
+        [self.navigationController popViewControllerAnimated:YES];
+
+    }failure:^(AFHTTPRequestOperation *operation, NSError *error){
+         NSLog(@"error =%@ ",[error description]);
+         [publicRequest deleteHomewrk:homeWorkId];
+         HUD.labelText = @"请求超时";
+         [HUD hide:YES afterDelay:1.];
+     }  ];
+    }
+    
+}
+
+#pragma mark - recording
+- (void)startStopRecording:(id)sender
+{
+    if(!self.isRecording)
+    {
+        stopTimer = [NSTimer scheduledTimerWithTimeInterval:180 target:self selector:@selector(stoprecord) userInfo:nil repeats:NO];
+        shortTimer = [NSTimer scheduledTimerWithTimeInterval:4 target:self selector:@selector(shortTime) userInfo:nil repeats:NO];
+        shortTime = 0;
+        
+        NSLog(@"正在录音......");
+        session = [AVAudioSession sharedInstance];
+//        session.delegate = self;
+        NSError *sessionError;
+        [session setCategory:AVAudioSessionCategoryPlayAndRecord error:&sessionError];
+        if(session == nil)
+            NSLog(@"Error creating session: %@", [sessionError description]);
+        else
+        [session setActive:YES error:nil];
+        //录音设置
+        NSMutableDictionary *settings = [[NSMutableDictionary alloc] init];
+        //录音格式 无法使用
+        [settings setValue :[NSNumber numberWithInt:kAudioFormatLinearPCM] forKey: AVFormatIDKey];
+        //采样率
+        [settings setValue :[NSNumber numberWithFloat:22050.0] forKey: AVSampleRateKey];//44100.0
+        //通道数
+        [settings setValue :[NSNumber numberWithInt:2] forKey: AVNumberOfChannelsKey];
+        //线性采样位数
+        [settings setValue :[NSNumber numberWithInt:16] forKey: AVLinearPCMBitDepthKey];
+        //音频质量,采样质量
+        [settings setValue:[NSNumber numberWithInt:AVAudioQualityMin] forKey:AVEncoderAudioQualityKey];
+        
+        self.isRecording = YES;
+        [self.recordButton setImage:[UIImage imageNamed:@"record.png"] forState:UIControlStateNormal];
+        [self.playButton setEnabled:NO];
+
+        recorder = [[AVAudioRecorder alloc] initWithURL:recordedFile settings:nil error:nil];
+        [recorder prepareToRecord];
+        [recorder record];
+        player = nil;
+        
+    }
+    else
+    {
+        [self stoprecord];
     }
 }
 
-#pragma mark -
-
-- (void)toMp3:(NSString*)cafFileName
+-(void)shortTime
 {
-    NSString *cafFilePath =[_strCAFPath stringByAppendingPathComponent:self._lastRecordFileName];
-    NSDateFormatter *fileNameFormat=[[NSDateFormatter alloc] init];
-    [fileNameFormat setDateFormat:@"yyyyMMddhhmmss"];
-    NSString *mp3FileName = [fileNameFormat stringFromDate:[NSDate date]];
-    mp3FileName = [mp3FileName stringByAppendingString:@".mp3"];
-    NSString *mp3FilePath = [_strMp3Path stringByAppendingPathComponent:mp3FileName];
-    
+    shortTime = 1;
+    [stopTimer invalidate];
+    stopTimer=nil;
+}
+
+-(void)stoprecord
+{
+    //取消录音
+    if (shortTime ==1) {
+        NSLog(@"录音结束......");
+        self.isRecording = NO;
+        [self.recordButton setImage:[UIImage imageNamed:@"voice.png"] forState:UIControlStateNormal];
+        [self.playButton setEnabled:YES];
+        self.isRecording = NO;
+        [recorder stop];
+    if (recorder) {
+        recorder = nil;
+        AVAudioSession * audioSession = [AVAudioSession sharedInstance];
+        [audioSession setCategory:AVAudioSessionCategoryPlayAndRecord error: nil];
+        
+        UInt32 sessionCategory = kAudioSessionCategory_MediaPlayback;
+        AudioSessionSetProperty(kAudioSessionProperty_AudioCategory, sizeof(sessionCategory), &sessionCategory);
+        UInt32 audioRouteOverride = kAudioSessionOverrideAudioRoute_Speaker;
+        AudioSessionSetProperty (kAudioSessionProperty_OverrideAudioRoute,sizeof (audioRouteOverride),&audioRouteOverride);
+        NSError *playerError;
+        player = [[AVAudioPlayer alloc] initWithContentsOfURL:recordedFile error:&playerError];
+        if (player == nil)
+        {
+            NSLog(@"ERror creating player: %@", [playerError description]);
+        }
+        player.delegate = self;
+    }
+        
+    }else
+    {
+        [stopTimer invalidate];
+        stopTimer=nil;
+        
+        HUD = [MBProgressHUD showHUDAddedTo:self.view animated:YES];
+        HUD.labelText = @"录制时间少于4秒请重新录制";
+        [HUD hide:YES afterDelay:1];
+        [self.playButton setEnabled:NO];
+        [self.recordButton setImage:[UIImage imageNamed:@"voice.png"] forState:UIControlStateNormal];
+        [recorder stop];
+        self.isRecording = NO;
+    }
+}
+
+-(void)playRecord:(UIButton *)sender
+{
+    if([player isPlaying])
+    {
+        [player pause];
+        [self.recordButton setEnabled:YES];
+        [self.playButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+        
+    }else
+    {
+        if ([_streamer isPlaying]) {
+            [_streamer pause];
+            [self.playMusicButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+        }
+        
+        [player play];
+        [self.recordButton setEnabled:NO];
+        [self.playButton setImage:[UIImage imageNamed:@"play.png"] forState:UIControlStateNormal];
+    }
+}
+
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag
+{
+    [self.recordButton setEnabled:YES];
+    self.player = nil;
+    [self.playButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+}
+
+- ( BOOL )audio_PCMtoMP3
+{
+    NSString *cafFilePath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/downloadFile.caf"];
+    mp3FilePath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/downloadFile.mp3"];
+    NSFileManager* fileManager=[NSFileManager defaultManager];
+    if([fileManager removeItemAtPath:mp3FilePath error:nil])
+    {
+        NSLog(@"已经删除caf ");
+    }
     @try {
         int read, write;
-        
-        FILE *pcm = fopen([cafFilePath cStringUsingEncoding:1], "rb");//被转换的文件
-        FILE *mp3 = fopen([mp3FilePath cStringUsingEncoding:1], "wb");//转换后文件的存放位置
+        FILE *pcm = fopen([cafFilePath cStringUsingEncoding:1], "rb");  //source 被转换的音频文件位置
+        fseek(pcm, 4*1024, SEEK_CUR);                                   //skip file header
+        FILE *mp3 = fopen([mp3FilePath cStringUsingEncoding:1], "wb");  //output 输出生成的Mp3文件位置
         
         const int PCM_SIZE = 8192;
         const int MP3_SIZE = 8192;
@@ -197,10 +387,11 @@
         unsigned char mp3_buffer[MP3_SIZE];
         
         lame_t lame = lame_init();
-        lame_set_in_samplerate(lame, 44100);
+        lame_set_in_samplerate(lame, 22050.0);
         lame_set_VBR(lame, vbr_default);
+ 
         lame_init_params(lame);
-        
+        // mp3压缩参数
         do {
             read = fread(pcm_buffer, 2*sizeof(short int), PCM_SIZE, pcm);
             if (read == 0)
@@ -219,111 +410,113 @@
     @catch (NSException *exception) {
         NSLog(@"%@",[exception description]);
     }
-    @finally {
-    }
+    return YES;
 }
+#pragma mark -playMusci
 
-- (void)toPlay:(id)sender
+-(void)playMusic:(UIButton * )sender
 {
-    [self toPlayCAF:nil];
-}
-
-- (void)toPlayCAF:(NSString*)cafFileName{
-    
-    NSString *cafFilePath =[_strCAFPath stringByAppendingPathComponent:cafFileName];
-    NSURL *cafURL = [NSURL fileURLWithPath:cafFilePath];
-    NSLog(@"cafURL:%@",cafURL);
-    
-    NSError *error=nil;
-    if (!player) {
-        player= [[AVAudioPlayer alloc] initWithContentsOfURL:cafURL error:&error];
-    }else {
-        if ([player isPlaying]) {
-            [player stop];
+    if (sender.tag == 2 ) {
+        -- index ;
+        if (index<0) {
+            index = 0;
         }
-        player=nil;
-        player= [[AVAudioPlayer alloc] initWithContentsOfURL:cafURL error:&error];
+        [_streamer stop];
+        _streamer = nil;
+    }else if (sender.tag ==3)
+    {
+        [_streamer stop];
+        _streamer = nil;
+        ++ index ;
+        if (index>=mp3UrlArr.count) {
+            index = mp3UrlArr.count-1;
+        }
     }
-    player.volume = 1.0;
-    player.numberOfLoops= 0;
-    if(player== nil)
-        NSLog(@"%@", [error description]);
-    else
-    {
-        [[AVAudioSession sharedInstance] setCategory: AVAudioSessionCategoryPlayAndRecord error: nil];
-        [player play];
-    }    
-}
 
-//
--(void)PlayMusic
-{
-    if (playOrNot) {
-        playOrNot = NO;
-        [playBt setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
-        [self.audioController pause];
- 
-    }else
-    {
-        playOrNot = YES;
-        [playBt setImage:[UIImage imageNamed:@"play.png"] forState:UIControlStateNormal];
-        [self.audioController play];
-        _progressUpdateTimer = [NSTimer scheduledTimerWithTimeInterval:1
-                                                                target:self
-                                                              selector:@selector(updatePlaybackProgress)
-                                                              userInfo:nil
-                                                               repeats:YES];
+    if (!_streamer) {
+         self.streamer = [[AudioStreamer alloc] initWithURL:[NSURL URLWithString:[mp3UrlArr objectAtIndex:index]]];
+        _progressUpdateTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(update) userInfo:nil repeats:YES];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(paperWorkPlaybackStateChanged:)
+                                                     name:ASStatusChangedNotification
+                                                   object:_streamer];
 
     }
+    if (![_streamer isPlaying]) {
+        if([player isPlaying])//录音的播放，如果播放则暂停录音的播放
+        {
+            [player pause];
+            [self.recordButton setEnabled:YES];
+            [self.playButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+        }
+        [_streamer start];
+        [self.playMusicButton setImage:[UIImage imageNamed:@"play.png"] forState:UIControlStateNormal];
+    }else {
+        [_streamer pause];
+        [self.playMusicButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+    }
 }
 
-- (void)updatePlaybackProgress
+-(void)update
 {
-    if (self.audioController.stream.continuous) {
-        self.progressSlider.enabled = NO;
-        self.progressSlider.value = 0;
-        timeLable.text = @"";
-    } else {
-        self.progressSlider.enabled = YES;
-        FSStreamPosition cur = self.audioController.stream.currentTimePlayed;
-        FSStreamPosition end = self.audioController.stream.duration;
-        self.progressSlider.value = cur.position*100;
-        timeLable.text = [NSString stringWithFormat:@"%i:%02i / %i:%02i",
-                          cur.minute, cur.second,
-                          end.minute, end.second];
+    self.progressSlider.value = (_streamer.progress/_streamer.duration)*100;
+    if (_streamer.progress <= _streamer.duration ) {
+        int allMin = (int)_streamer.duration/60;
+        int allSec = (int)_streamer.duration%60;
+        timeLable.text = [NSString stringWithFormat:@"%d:%d",allMin,allSec];
+    }
+}
+
+-(void)seek
+{
+    double seekPoint = self.progressSlider.value;
+    [_streamer seekToTime:seekPoint];
+}
+
+- (void)paperWorkPlaybackStateChanged:(NSNotification *)notification
+{
+    if ([_streamer isWaiting])
+    {
+        [self.playMusicButton setImage:[UIImage imageNamed:@"play.png"] forState:UIControlStateNormal];
         
+    } else if ([_streamer isIdle]) {
+        [_streamer stop];
+        _streamer = nil;
+        [_progressUpdateTimer invalidate];
+        _progressUpdateTimer=nil;
+        [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                        name:ASStatusChangedNotification
+                                                      object:_streamer];
+        
+        [self.playMusicButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+        
+    } else if ([_streamer isPaused]) {//暂停
+//        [_streamer stop];
+        [self.playMusicButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+        
+    } else if ([_streamer isPlaying] || [_streamer isFinishing]) {
+        
+        [self.playMusicButton setImage:[UIImage imageNamed:@"play.png"] forState:UIControlStateNormal];
+        
+    } else {
+
     }
 }
 
--(NSURL *)getNetworkUrl{
-    NSString *urlStr=@"http://other.92wy.com/star/Fanfan/woxiangdashenggaosuni_yanzouban.mp3?";
-    NSURL *url=[NSURL URLWithString:urlStr];
-    return url;
-}
 
--(FSAudioController *)audioController
-{
-    if (! _audioController)
-    {
-        NSURL *url=[self getNetworkUrl];
-        _audioController = [[FSAudioController alloc] initWithUrl:url];
-        [_audioController setVolume:1];//设置声音
-    }
-    return _audioController;
-}
-
-// tableView
+#pragma mark - tableView
 -(void)initTableView
 {
     UIView *view = [UIView new];
     view.backgroundColor = [UIColor clearColor];
-    _finishTableView = [[UITableView alloc] initWithFrame:CGRectMake(10, 0, Main_Screen_Width-20, Main_Screen_Height-49)style:UITableViewStylePlain];
+    _finishTableView = [[UITableView alloc] initWithFrame:CGRectMake(10, 0, Main_Screen_Width-20, Main_Screen_Height-49-64)style:UITableViewStylePlain];
     _finishTableView.backgroundColor = [UIColor clearColor];
     _finishTableView.delegate =self;
     _finishTableView.dataSource = self;
     [_finishTableView setTableFooterView:view];
     [self.view addSubview:_finishTableView];
 }
+
 //指定有多少个分区(Section)，默认为1
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -332,62 +525,131 @@
 }
 
 //指定每个分区中有多少行，默认为1
-
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section{
     return 1;
 }
+
 //绘制Cell
 
 -(UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    
     static NSString *tableSampleIdentifier = @"TableSampleIdentifier";
     
     UITableViewCell * cell =  [tableView dequeueReusableCellWithIdentifier:tableSampleIdentifier];
     [cell removeFromSuperview];
     if (cell ==nil) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:tableSampleIdentifier];
+    }else
+    {
+        [cell removeFromSuperview];
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:tableSampleIdentifier];
     }
+
     [_finishTableView  setSeparatorStyle:UITableViewCellSeparatorStyleNone];
     [cell setSelectionStyle:UITableViewCellSelectionStyleNone];
     cell.backgroundColor = [UIColor whiteColor];
     cell.layer.cornerRadius = 5;
-//    if ([self.type isEqualToString:@"finishi"]) {
-        // 如果有音频文件
-        if (indexPath.section ==0) {
-            
-            UILabel * titleLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, Main_Screen_Width-40, 20)];
-            titleLable.text = @"英语：背诵第三课";
-            titleLable.font = [UIFont systemFontOfSize:16.];
-            [cell.contentView addSubview:titleLable];
-            UILabel * dateLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 30, Main_Screen_Width-40, 20)];
-            dateLable.text = @"今天：14.30";
-            dateLable.font = [UIFont systemFontOfSize:14.];
-            dateLable.textColor = [UIColor grayColor];
-            [cell.contentView addSubview:dateLable];
-            
-            UILabel * contentLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 50, Main_Screen_Width-40, 20)];
-            contentLable.text = @"任务：准备A4纸，素描维纳斯，拍照上传，家长请帮忙监督";
-            contentLable.font = [UIFont systemFontOfSize:14.];
-            [cell.contentView addSubview:contentLable];
-            
-            UIView * playView = [self drawPlayViewY:80];
+    // 如果有音频文件
+    if (indexPath.section ==0) {
+        //自适应lable高度 title
+        float titleLableSizeHeight= [publicRequest lableSizeWidth:Main_Screen_Width-40 content:[workPaperDic objectForKey:@"title"]] ;
+        UILabel * titleLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 10, Main_Screen_Width-40, titleLableSizeHeight)];
+        titleLable.text = [workPaperDic objectForKey:@"title"];
+        titleLable.font = [UIFont systemFontOfSize:16.];
+        titleLable.lineBreakMode = NSLineBreakByWordWrapping;
+        titleLable.numberOfLines = 0;
+        [cell.contentView addSubview:titleLable];
+        UILabel * dateLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 30+(titleLableSizeHeight-20), Main_Screen_Width-40, 20)];
+        dateLable.text = [[workPaperDic objectForKey:@"updated_at"] substringToIndex:10];
+        dateLable.font = [UIFont systemFontOfSize:14.];
+        dateLable.textColor = [UIColor grayColor];
+        [cell.contentView addSubview:dateLable];
+        //自适应lable高度 内容
+        float contentLableSizeHeight= [publicRequest lableSizeWidth:Main_Screen_Width-40 content:[workPaperDic objectForKey:@"description"]] ;
+        UILabel * contentLable = [[UILabel alloc] initWithFrame:CGRectMake(10, 50+(titleLableSizeHeight-20), Main_Screen_Width-40, contentLableSizeHeight)];
+        contentLable.text =[workPaperDic objectForKey:@"description"];
+        contentLable.lineBreakMode = NSLineBreakByWordWrapping;
+        contentLable.numberOfLines = 0;
+         contentLable.alpha = 0.6;
+        contentLable.font = [UIFont systemFontOfSize:14.];
+        [cell.contentView addSubview:contentLable];
+        
+        int mp3Heigh = 0;
+        if (mp3UrlArr.count>0) {
+            UIView * playView = [self drawPlayViewY:45+titleLableSizeHeight+contentLableSizeHeight];
             [cell.contentView addSubview:playView];
-            self.progressSlider = [[UISlider alloc] initWithFrame:CGRectMake(20, 190, Main_Screen_Width-100-20, 10)];
+            self.progressSlider = [[UISlider alloc] initWithFrame:CGRectMake(20,163+titleLableSizeHeight+contentLableSizeHeight, Main_Screen_Width-100-20, 10)];
             self.progressSlider.value = 0;
             self.progressSlider.minimumValue = 0;
             self.progressSlider.maximumValue = 100;
             self.progressSlider.minimumTrackTintColor = [UIColor greenColor];
-            //    [self.progressSlider addTarget:self action:@selector(seek:) forControlEvents:UIControlEventValueChanged];
+            [self.progressSlider addTarget:self action:@selector(seek) forControlEvents:UIControlEventValueChanged];
             [cell.contentView addSubview:self.progressSlider];
             
-            timeLable = [[UILabel alloc] initWithFrame:CGRectMake(Main_Screen_Width-100, 145, 100, 20)];
+            timeLable = [[UILabel alloc] initWithFrame:CGRectMake(Main_Screen_Width-90,155+titleLableSizeHeight+contentLableSizeHeight, 100, 20)];
             timeLable.font = [UIFont systemFontOfSize:11.];
-            timeLable.text = @"";
+            timeLable.text = @"00:00";
             timeLable.textColor = [UIColor grayColor];
             [cell.contentView addSubview:timeLable];
-        }else
-        {
-            UIView * playView = [[UIView alloc] initWithFrame:CGRectMake(10,10, Main_Screen_Width-40, 100)];
+            mp3Heigh = 140;
+        }
+        int  imageHeight = 0;
+        if (imageUrlArr.count > 0) {
+            UIScrollView * scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, mp3Heigh+50+titleLableSizeHeight+contentLableSizeHeight, Main_Screen_Width-20, 100)];
+            scrollView.showsHorizontalScrollIndicator = NO;
+            scrollView.contentSize = CGSizeMake(10+108 * imageUrlArr.count,100);
+            //        scrollView.bounces = NO;
+            scrollView.delegate =self;
+            scrollView.pagingEnabled = YES;
+            scrollView.userInteractionEnabled = YES;
+            [cell.contentView addSubview:scrollView];
+            
+            for (int i= 0; i<[imageUrlArr count]; i++) {
+                UIImageView * imageView = [[UIImageView alloc] initWithFrame:CGRectMake(10+108*i, 0, 100, 100)];
+                imageView.tag = i;
+                imageView.userInteractionEnabled = YES;
+                // 内容模式
+                imageView.clipsToBounds = YES;
+                imageView.contentMode = UIViewContentModeScaleAspectFill;
+                [scrollView addSubview:imageView];
+                NSURL * imageUrl = [NSURL URLWithString:[imageUrlArr objectAtIndex:i]];
+                [imageView setImageWithURL:imageUrl];
+                imageView.tag =i;
+                UITapGestureRecognizer *pass1 = [[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(tapImage:)];
+                [imageView addGestureRecognizer:pass1];
+            }
+            imageHeight = 115;
+        }
+        if (mp4UrlArr.count > 0) {
+            UIScrollView * scrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0,imageHeight+mp3Heigh+50+titleLableSizeHeight+contentLableSizeHeight, Main_Screen_Width-20, 100)];
+            scrollView.showsHorizontalScrollIndicator = NO;
+            scrollView.contentSize = CGSizeMake(10+108 * imageUrlArr.count,100);
+            //        scrollView.bounces = NO;
+            scrollView.delegate =self;
+            scrollView.pagingEnabled = YES;
+            scrollView.userInteractionEnabled = YES;
+            [cell.contentView addSubview:scrollView];
+            
+            for (int i= 0; i<[mp4UrlArr count]; i++) {
+                UIImageView * imageView = [[UIImageView alloc] initWithFrame:CGRectMake(10+108*i, 0, 100, 100)];
+                imageView.tag = i;
+                imageView.userInteractionEnabled = YES;
+                // 内容模式
+                imageView.clipsToBounds = YES;
+                imageView.contentMode = UIViewContentModeScaleAspectFill;
+                [scrollView addSubview:imageView];
+                //如果有mp4则播放按钮显示
+                imageView.backgroundColor = [UIColor colorWithRed:235/255. green:235/255. blue:235/255. alpha:1.];
+                UIButton * imageBt = [[UIButton alloc] initWithFrame:CGRectMake(35+108*i,25, 50, 50)];
+                [imageBt setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+                imageBt.tag = i;
+                [imageBt addTarget:self action:@selector(initMpMOviePlayerPapers:) forControlEvents:UIControlEventTouchUpInside];
+                [scrollView addSubview:imageBt];
+            }
+        }
+        
+    }else
+    {
+            UIView * playView = [[UIView alloc] initWithFrame:CGRectMake(10,10, Main_Screen_Width-40, 120)];
             playView.backgroundColor = [UIColor colorWithRed:235/255. green:235/255. blue:235/255. alpha:1.];
             [cell.contentView addSubview:playView];
             
@@ -398,14 +660,15 @@
             titleLable.textAlignment = NSTextAlignmentCenter;
             [playView addSubview:titleLable];
             
-            _recordButton = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2-70, 40, 50, 50)];
+            _recordButton = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2-70, 40, 60, 60)];
             [_recordButton setImage:[UIImage imageNamed:@"voice.png"] forState:UIControlStateNormal];
-            [_recordButton addTarget:self action:@selector(recordOrStop:) forControlEvents:UIControlEventTouchUpInside];
+            [_recordButton addTarget:self action:@selector(startStopRecording:) forControlEvents:UIControlEventTouchUpInside];
             [playView addSubview:_recordButton];
             
-            _playButton = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2+20, 40, 50, 50)];
+            _playButton = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2+20, 40, 60, 60)];
             [_playButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
-            [_playButton addTarget:self action:@selector(toPlay:) forControlEvents:UIControlEventTouchUpInside];
+            [_playButton addTarget:self action:@selector(playRecord:) forControlEvents:UIControlEventTouchUpInside];
+            [self.playButton setEnabled:NO];
             [playView addSubview:_playButton];
             
              //留言
@@ -414,15 +677,25 @@
             [messege.layer setBorderWidth:1];
             [cell.contentView addSubview:messege];
             
-            UIImageView * image = [[UIImageView alloc] initWithFrame:CGRectMake(10, 5, 30, 30)];
+            UIImageView * image = [[UIImageView alloc] initWithFrame:CGRectMake(10, 5, 40, 40)];
             image.image = [UIImage imageNamed:@"wenziLiuyan.png"];
             [messege addSubview:image];
             
+            //监听输入框
+            [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillShow:) name:UIKeyboardWillShowNotification object:nil];
+            [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
+            
+            messageword = [[UITextView alloc] initWithFrame:CGRectMake(50, 0, Main_Screen_Width-90, 50)];
+            messageword.font = [UIFont systemFontOfSize:16.];
+            messageword.delegate = self;
+            [messege addSubview:messageword];
+            
             UIButton * commitBt = [[UIButton alloc] initWithFrame:CGRectMake(10, 220, Main_Screen_Width-40, 60)];
             [commitBt setImage:[UIImage imageNamed:@"commitWork.png"] forState:UIControlStateNormal];
+            [commitBt addTarget:self action:@selector(commitHomeWork:) forControlEvents:UIControlEventTouchUpInside];
             [cell.contentView addSubview:commitBt];
-        }
-//    }
+        
+    }
     return cell;
 }
 
@@ -431,15 +704,29 @@
     if (indexPath.section ==1) {
         return 300;
     }
-    return 220;
+    int  imageheight = 0 ;
+    int  mp3Height = 0 ;
+    int  mp4Height = 0 ;
+    if (imageUrlArr.count>0)
+        imageheight = 110 ;
+    if (mp3UrlArr.count >0)
+        mp3Height = 125;
+    if(mp4UrlArr.count > 0)
+        mp4Height = 105;
+    float titleLableSizeHeight= [publicRequest lableSizeWidth:Main_Screen_Width-40 content:[workPaperDic objectForKey:@"title"]] ;
+    float contentLableSizeHeight= [publicRequest lableSizeWidth:Main_Screen_Width-40 content:[workPaperDic objectForKey:@"description"]] ;
+    
+    return 80+titleLableSizeHeight+contentLableSizeHeight+mp3Height +imageheight + mp4Height;
+    
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath{
     [tableView deselectRowAtIndexPath:indexPath animated:YES];//选中后的反显颜色即刻消失
+    [messageword resignFirstResponder];
 }
 
-- ( CGFloat )tableView:( UITableView *)tableView heightForHeaderInSection:( NSInteger )section
 
+- ( CGFloat )tableView:( UITableView *)tableView heightForHeaderInSection:( NSInteger )section
 {  if(section ==0 )
     return 0;
     return 10;
@@ -464,25 +751,101 @@
     titleLable.textAlignment = NSTextAlignmentCenter;
     [playView addSubview:titleLable];
     
-    playBt = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2-22, 33, 50, 50)];
-    [playBt setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
-    [playBt addTarget:self action:@selector(PlayMusic) forControlEvents:UIControlEventTouchUpInside];
-    [playView addSubview:playBt];
+    _playMusicButton = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2-22, 30, 60, 60)];
+    [_playMusicButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+    _playMusicButton.tag = 1;
+    [_playMusicButton addTarget:self action:@selector(playMusic:) forControlEvents:UIControlEventTouchUpInside];
+    [playView addSubview:_playMusicButton];
     
     UIButton *leftBt = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2 -80, 40, 40, 40)];
     [leftBt setImage:[UIImage imageNamed:@"left.png"] forState:UIControlStateNormal];
-    [leftBt addTarget:self action:@selector(PlayMusic) forControlEvents:UIControlEventTouchUpInside];
+    leftBt.tag = 2 ;
+    [leftBt addTarget:self action:@selector(playMusic:) forControlEvents:UIControlEventTouchUpInside];
     [playView addSubview:leftBt];
     
     UIButton *rightBt = [[UIButton alloc] initWithFrame:CGRectMake(playView.frame.size.width/2 +50, 40, 40, 40)];
     [rightBt setImage:[UIImage imageNamed:@"next.png"] forState:UIControlStateNormal];
-    [rightBt addTarget:self action:@selector(PlayMusic) forControlEvents:UIControlEventTouchUpInside];
+    rightBt.tag = 3 ;
+    [rightBt addTarget:self action:@selector(playMusic:) forControlEvents:UIControlEventTouchUpInside];
     [playView addSubview:rightBt];
+    
     return playView;
 }
 
-#pragma mark -recorde 
+- (void) tapImage:(UITapGestureRecognizer *)tap
+{
+    int count = imageUrlArr.count;
+    NSMutableArray *photos = [NSMutableArray arrayWithCapacity:count];
+    for (int i = 0; i<count; i++) {
+        // 替换为中等尺寸图片
+        NSString *url = [imageUrlArr[i] stringByReplacingOccurrencesOfString:@"thumbnail" withString:@"bmiddle"];
+        MJPhoto *photo = [[MJPhoto alloc] init];
+        photo.url = [NSURL URLWithString:url]; // 图片路径
+        //        photo.srcImageView = imageViewArr[i]; // 来源于哪个UIImageView
+        [photos addObject:photo];
+    }
+    // 2.显示相册
+    MJPhotoBrowser *browser = [[MJPhotoBrowser alloc] init];
+    browser.currentPhotoIndex = tap.view.tag; // 弹出相册时显示的第一张图片是？
+    browser.photos = photos; // 设置所有的图片
+    [browser show];
+}
 
+#pragma mark- playVideo
+
+-(void)initMpMOviePlayerPapers:( UIButton  *)sender
+{
+    [_streamer pause];
+    [self.playMusicButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+    
+
+    MPMoviePlayerViewController  *moviePlayer =[[ MPMoviePlayerViewController alloc ]  initWithContentURL :[NSURL URLWithString:[mp4UrlArr objectAtIndex:sender.tag]]];
+    [self createMPPlayerController:moviePlayer];
+}
+
+- ( void )createMPPlayerController:( MPMoviePlayerViewController  *)moviePlayer {
+
+    [moviePlayer. moviePlayer   prepareToPlay ];
+    [ self   presentMoviePlayerViewControllerAnimated :moviePlayer]; // 这里是presentMoviePlayerViewControllerAnimated
+    
+    [moviePlayer. moviePlayer   setControlStyle : MPMovieControlStyleFullscreen ];
+    
+    [moviePlayer. view   setBackgroundColor :[ UIColor   clearColor ]];
+    
+    [moviePlayer. view   setFrame : self . view . bounds ];
+    
+    [[ NSNotificationCenter   defaultCenter ]  addObserver : self
+     
+                                                  selector : @selector (movieFinishedCallback:)
+     
+                                                      name : MPMoviePlayerPlaybackDidFinishNotification
+     
+                                                    object :moviePlayer. moviePlayer ];
+    
+    
+}
+
+-( void )movieStateChangeCallback:( NSNotification *)notify  {
+    
+    //点击播放器中的播放/ 暂停按钮响应的通知
+}
+
+-( void )movieFinishedCallback:( NSNotification *)notify{
+    
+    // 视频播放完或者在presentMoviePlayerViewControllerAnimated下的Done按钮被点击响应的通知。
+    
+    MPMoviePlayerController * theMovie = [notify  object ];
+    
+    [[ NSNotificationCenter   defaultCenter ]  removeObserver : self
+     
+                                                         name : MPMoviePlayerPlaybackDidFinishNotification
+     
+                                                       object :theMovie];
+    
+    [ self   dismissMoviePlayerViewControllerAnimated ];
+}
+
+#pragma mark -recorde
 - (void)viewDidUnload
 {
     [self setPlayButton:nil];
@@ -490,87 +853,28 @@
     recorder = nil;
     player = nil;
     NSFileManager *fileManager = [NSFileManager defaultManager];
-    // [fileManager removeItemAtPath:recordedFile.path error:nil];
+    [fileManager removeItemAtPath:recordedFile.path error:nil];
     [fileManager removeItemAtURL:recordedFile error:nil];
     recordedFile = nil;
     [super viewDidUnload];
 }
 
-- (void)viewWillAppear:(BOOL)animated
-{
-    [super viewWillAppear:animated];
+//开始编辑输入框的时候，软键盘出现，执行此事件
+-(void) keyboardWillShow:(NSNotification *)note{
+    int offset = 216.0- 64;//键盘高度216
+    NSTimeInterval animationDuration = 0.30f;
+    [UIView beginAnimations:@"ResizeForKeyboard" context:nil];
+    [UIView setAnimationDuration:animationDuration];
+    
+    //将视图的Y坐标向上移动offset个单位，以使下面腾出地方用于软键盘的显示
+    if(offset > 0)
+        self.view.frame = CGRectMake(0.0f, -offset, self.view.frame.size.width, self.view.frame.size.height);
+    
+    [UIView commitAnimations];
 }
 
-- (void)viewDidAppear:(BOOL)animated
-{
-    [super viewDidAppear:animated];
-}
-
-- (void)viewWillDisappear:(BOOL)animated
-{
-    [super viewWillDisappear:animated];
-}
-
-- (void)viewDidDisappear:(BOOL)animated
-{
-    [super viewDidDisappear:animated];
-}
-
-- (void)playPause:(id)sender
-{
-    //If the track is playing, pause and achange playButton text to "Play"
-    if(voicePlay)
-    {
-        voicePlay = NO;
-        [player pause];
-        [self.playButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
-    }//If the track is not player, play the track and change the play button to "Pause"
-    else
-    {
-        voicePlay = YES;
-        [player play];
-        [self.playButton setImage:[UIImage imageNamed:@"play.png"] forState:UIControlStateNormal];
-    }
-}
-
-- (void)startStopRecording:(id)sender
-{
-    //If the app is note recording, we want to start recording, disable the play button, and make the record button say "STOP"
-    if(!self.isRecording)
-    {
-        self.isRecording = YES;
-        [self.recordButton setImage:[UIImage imageNamed:@"recoreding.png"] forState:UIControlStateNormal];
-        [self.playButton setEnabled:NO];
-        [self.playButton.titleLabel setAlpha:0.5];
-        recorder = [[AVAudioRecorder alloc] initWithURL:recordedFile settings:nil error:nil];
-        [recorder prepareToRecord];
-        [recorder record];
-        player = nil;
-    }
-    //If the app is recording, we want to stop recording, enable the play button, and make the record button say "REC"
-    else
-    {
-        self.isRecording = NO;
-        [self.recordButton setImage:[UIImage imageNamed:@"voice.png"] forState:UIControlStateNormal];
-        [self.playButton setEnabled:YES];
-        [self.playButton.titleLabel setAlpha:1];
-        [recorder stop];
-        recorder = nil;
-        NSError *playerError;
-        
-        player = [[AVAudioPlayer alloc] initWithContentsOfURL:recordedFile error:&playerError];
-        
-        if (player == nil)
-        {
-            NSLog(@"ERror creating player: %@", [playerError description]);
-        }
-        player.delegate = self;
-    }
-}
-
-- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag
-{
-     [self.playButton setImage:[UIImage imageNamed:@"pause.png"] forState:UIControlStateNormal];
+- (void)keyboardWillHide:(NSNotification *)notification {
+    self.view.frame =CGRectMake(0, 64, self.view.frame.size.width, self.view.frame.size.height);
 }
 
 - (void)didReceiveMemoryWarning {

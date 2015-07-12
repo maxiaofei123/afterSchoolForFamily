@@ -8,6 +8,14 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol loginDelegate <NSObject>
+
+-(void)initTableView;
+
+@end
+
 @interface H_login_ViewController : UIViewController
+
+@property (nonatomic, unsafe_unretained) id<loginDelegate> delegate;
 
 @end

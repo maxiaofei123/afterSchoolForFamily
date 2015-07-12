@@ -9,5 +9,8 @@
 #import <UIKit/UIKit.h>
 
 @interface Work_type_photo_ViewController : UIViewController
+@property(nonatomic,strong) NSString * photoWorkId;
+@property(nonatomic,strong) NSString * type;
 
+@property(nonatomic,assign) NSObject<UIViewPassValueDelegate> *delegate;
 @end

@@ -20,5 +20,10 @@
     #import <Foundation/Foundation.h>
     #import "AFNetworking.h"
     #import "MBProgressHUD.h"
+    #import "UIImageView+WebCache.h"
+    MBProgressHUD *HUD;
+#import "publicRequest.h"
+#import "MJRefresh.h"
+#import "passDelegate.h"
 
 #endif

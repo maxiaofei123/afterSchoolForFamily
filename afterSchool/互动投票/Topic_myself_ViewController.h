@@ -12,5 +12,9 @@
 /**
  当点击的时候，执行的block
  **/
-@property (nonatomic , copy) void (^myselfTopicTapActionBlock)(NSInteger pageIndex);
+@property (nonatomic , copy) void (^myselfTopicTapActionBlock)(NSInteger pageIndex,NSDictionary * allDic,NSDictionary * imageDic);
+@property (nonatomic , copy) void (^addTopicBlock)();
+
+-(void)headerRefresh;
+
 @end

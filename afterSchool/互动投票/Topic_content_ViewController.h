@@ -10,4 +10,7 @@
 
 @interface Topic_content_ViewController : UIViewController
 
+@property(nonatomic,strong)NSString * topicId;
+@property(nonatomic,strong)NSDictionary * topicDic;
+@property(nonatomic,strong)NSDictionary * imageDic;
 @end
