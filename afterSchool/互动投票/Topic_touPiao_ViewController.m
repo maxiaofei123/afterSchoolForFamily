@@ -275,12 +275,12 @@
         }else if (indexPath.row == voteOptionArr.count+1)//发布投票按钮
         {
             
-            UIButton * leftBt = [[UIButton alloc] initWithFrame:CGRectMake(Main_Screen_Width-125, 0, 35, 35)];
+            UIButton * leftBt = [[UIButton alloc] initWithFrame:CGRectMake(Main_Screen_Width-160, 20, 35, 35)];
             [leftBt setImage:[UIImage imageNamed:@"voteLeft.png"] forState:UIControlStateNormal];
             [leftBt addTarget:self action:@selector(chooseMin:) forControlEvents:UIControlEventTouchUpInside];
             [cell.contentView addSubview:leftBt];
             
-            UIButton * RBt = [[UIButton alloc] initWithFrame:CGRectMake(Main_Screen_Width-80, 0, 35, 35)];
+            UIButton * RBt = [[UIButton alloc] initWithFrame:CGRectMake(Main_Screen_Width-80, 20, 35, 35)];
             [RBt addTarget:self action:@selector(chooseAdd:) forControlEvents:UIControlEventTouchUpInside];
             [RBt setImage:[UIImage imageNamed:@"voteRight.png"] forState:UIControlStateNormal];
             [cell.contentView addSubview:RBt];
@@ -288,7 +288,7 @@
         } else if (indexPath.row == voteOptionArr.count+2)
         {
             
-            UIButton * voteBt = [[UIButton alloc] initWithFrame:CGRectMake(15, 10, self.view.frame.size.width-40, 60)];
+            UIButton * voteBt = [[UIButton alloc] initWithFrame:CGRectMake(15, 15, self.view.frame.size.width-40, 60)];
             [voteBt setImage:[UIImage imageNamed:@"voteButton.png"] forState:UIControlStateNormal];
             [voteBt addTarget:self action:@selector(chooReleaseVote) forControlEvents:UIControlEventTouchUpInside];
             [cell addSubview:voteBt];
@@ -377,11 +377,11 @@
         return height+10;
     }else if (indexPath.row == voteOptionArr.count+1)//发布投票按钮
     {
-        return 40;
+        return 60;
         
     }else if(indexPath.row == voteOptionArr.count+2)
     {
-        return 70;
+        return 75;
     }
     else if(indexPath.row == voteOptionArr.count+3)
     {
